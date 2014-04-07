@@ -1,0 +1,184 @@
+<?php
+require("fuzzydate.php");
+function add_meta_tag( $name, $value, $tag )
+{
+    $element = array(
+        '#tag' => 'meta',
+        '#attributes' => array(
+            'name'=> $name,
+            'content' => $value
+        )
+    );
+    drupal_add_html_head($element,$tag);            
+}
+function endsWith( $str, $sub ) {
+    return ( substr( $str, strlen( $str ) - strlen( $sub ) ) == $sub );
+}
+function biography_preprocess_page(&$vars)
+{
+    if ( strpos(request_uri(),"biography") )
+    {
+        add_meta_tag('description','AustESE timeline','austese timeline');
+        add_meta_tag("apple-mobile-web-app-capable","yes",'mobile-web-app-console');
+        add_meta_tag("apple-touch-fullscreen","yes",'apple-touch-fullscreen');
+        add_meta_tag("viewport","width=device-width, initial-scale=1.0, maximum-scale=1.0",'viewport');
+        drupal_add_js('http://code.jquery.com/ui/1.10.4/jquery-ui.js', 'external');
+        drupal_add_js(drupal_get_path('module','biography').'/js/storyjs-embed.js','file');
+        drupal_add_js(drupal_get_path('module', 'biography').'/js/fuzzydate.js','file');
+        drupal_add_js(drupal_get_path('module', 'biography').'/js/jquery.htmlClean.js','file');
+        drupal_add_js(drupal_get_path('module', 'biography').'/js/biography.js','file');
+        drupal_add_css(drupal_get_path('module','biography').'/css/biography.css','file');
+        drupal_add_css('http://code.jquery.com/ui/1.10.4/themes/smoothness/jquery-ui.css','external');
+    }
+}
+/**
+* @file
+* A block module to display an AustESE biography
+*/
+function biography_help($path, $arg) 
+{
+    switch ($path) 
+    {
+        case "admin/help#biography":
+            return '<p>' . 
+                t("Displays an author's biography in AustESE.") 
+                . '</p>';
+            break;
+  }
+}
+/**
+ * Implements hook_block_info().
+ */
+function biography_block_info() 
+{
+    $blocks['biography'] = array(
+        'info' => t('AustESE Biography Module'),
+        'cache' => DRUPAL_CACHE_PER_ROLE,
+    );
+    return $blocks;
+}
+function add_popup_option( $option, $event_type )
+{
+    $str = '<option';
+    if ( strtolower($event_type)==$option )
+        $str .= ' selected';
+    $str .= '>'.$option.'</option>';
+    return $str;
+}
+function add_search()
+{
+    global $language;
+    $lang_name = $language->language;
+    $prompt = "search";
+    if ( $lang_name == 'it' )
+        $prompt = "cerca";
+    else if ( $lang_name == 'es' )
+        $prompt = "buscar";
+    return '<div id="search_box">'.
+        '<input id="search_button" type="button" value="'.$prompt.'"></input>'.
+        ' <input id="search_expr" type="text"></input>'.
+        '</div>';
+}
+function year_dropdown()
+{
+    global $language;
+    $lang_name = $language->language; 
+    $prompt = "go to year: ";
+    if ( $lang_name == 'it' )
+        $prompt = 'vai a anno: ';
+    else if ( $lang_name == 'es' )
+        $prompt = 'ir al año: ';
+    $dropdown = ' <div id="years">'.$prompt.'<select id="year_dropdown">';
+    $dropdown .= '</select></div>';
+    return $dropdown;
+}
+function form_start()
+{
+    $form = '<form id="timeline-toolbar" method="get" action="';
+    $form .= "/harpur/biography";
+    $form .= '">';
+    return $form;
+}
+function form_end()
+{
+    return "</form>";
+}
+function type_popup($event_type)
+{
+    $popup = '<select id="event_type" name="event_type">';
+    $popup .= add_popup_option("biography",$event_type);
+    $popup .= add_popup_option("letter",$event_type);
+    $popup .= add_popup_option("composition",$event_type);
+    $popup .= add_popup_option("other",$event_type);
+    $popup .= '</select>';
+    return $popup;
+}
+/**
+ * Custom callback generates the biography year by year
+ * @return the html
+ */
+function biography_all()
+{
+    $event_type = (array_key_exists('event_type',$_REQUEST))?$_REQUEST['event_type']:'biography';
+    $url = variable_get('biography_docid',
+        "http://dev.austese.net/paratext/english/Harpur/biography");
+    $html = "<div id=\"tabs\">\n<ul><li><a href=\"#timeline\">Timeline</a></li>";
+    $html .= "<li><a href=\"#biography\">Biography</a></li></ul>\n";
+    $html .= '<div id="biography"></div>';
+    $html .= '<div style="clear: both"></div>';
+    /* timeline div */
+    $html .= '<div id="timeline">'.form_start().
+        type_popup($event_type).
+        form_end().
+        year_dropdown().
+        add_search().
+        '<div id="my_timeline"></div>'.
+        '<input type="hidden" id="biography_docid" value="'.$url.'"></input>'.
+        '</div>';
+    /* end of tabs div */
+    $html .= '</div>';
+    return $html;
+}
+/**
+ * Implements hook_menu(). Needed for config screen.
+ */
+function biography_menu() {
+  $items = array();
+
+  $items['admin/config/content/biography'] = array(
+    'title' => 'Biography',
+    'description' => 'Configuration for biography module',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('biography_form'),
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM
+  );
+  $items['biography'] = array(
+    'title' => "Biography",
+    'page callback' => 'biography_all',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK
+  );
+  return $items;
+}
+/**
+ * Page callback: Biography settings
+ * @param form the form object to override
+ * @param form_state the current state of the form (keys->values)
+ * @return an updated form
+ * @see quote_ticker_menu()
+ */
+function biography_form($form, &$form_state) 
+{
+    $url = variable_get('biography_docid',
+    "http://dev.austese.net/paratext/english/Harpur/biography/");
+    $form['biography_docid'] = array(
+        '#type' => 'textfield',
+        '#title' => t('AustESE biography docid'),
+        '#default_value' => $url,
+        '#size' => 128,
+        '#maxlength' => 256,
+        '#required' => TRUE
+    );
+    return $form;
+}

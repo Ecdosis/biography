@@ -1,0 +1,4 @@
+name = Biography
+description = Interactive representation of an author's biography
+core = 7.x
+configure = admin/config/content/biography
